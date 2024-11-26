@@ -1,6 +1,5 @@
 package org.example;
 
-
 public class Main {
 	public static void main(String[] args) {
 		// Specify the configuration file name
@@ -22,8 +21,8 @@ public class Main {
 		System.out.println("Feature Enabled: " + config.getProperty("feature.enabled", "false"));
 		
 		// Retrieve a localized message
-		System.out.println("Localized Message: " +
-				                   config.getLocalizedMessage("user.greeting", "Welcome to the application!"));
+		System.out.println(
+				"Localized Message: " + config.getLocalizedMessage("user.greeting", "Welcome to the application!"));
 		
 		// Update a property
 		config.setProperty("user.language", "fr", "Changed default language");
