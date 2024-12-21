@@ -7,9 +7,9 @@ import java.util.stream.Collectors;
 
 /// Config Utility Class To Create Dynamic Config Files
 public class Config {
-	private final String fileName;
 	private final boolean useAppDir;
 	private final CommentedProperties properties = new CommentedProperties();
+	private String fileName;
 	
 	/**
 	 * Initializes the Config object with the specified file name and directory usage flag.
@@ -24,14 +24,14 @@ public class Config {
 	}
 	
 	/**
-	 * Determines the application's directory path based on the location of the executing JAR file.
+	 * Retrieves the application's directory path based on the executing JAR file's location.
 	 *
 	 * @return the absolute path to the application's directory, or null if the path cannot be determined
 	 */
 	private String getAppPath() {
 		try {
-			String jarPath = Config.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
-			return new File(jarPath).getParent();
+			return new File(
+					Config.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath()).getParent();
 		} catch (Exception e) {
 			System.err.println("Error determining application path: " + e.getMessage());
 			return null;
@@ -39,20 +39,23 @@ public class Config {
 	}
 	
 	/**
-	 * Retrieves the configuration file object based on the application's directory or a specified file path.
+	 * Retrieves the configuration file object and ensures parent directories exist.
 	 *
 	 * @return a File object representing the configuration file
 	 */
 	private File getConfigFile() {
-		if (useAppDir) {
-			return new File(getAppPath() + File.separator + fileName);
+		String path = useAppDir ? getAppPath() + File.separator + fileName : fileName;
+		File configFile = new File(path);
+		
+		if (configFile.getParentFile() != null && !configFile.getParentFile().exists()) {
+			configFile.getParentFile().mkdirs();
 		}
-		return new File(fileName);
+		
+		return configFile;
 	}
 	
 	/**
-	 * Loads properties from the configuration file into memory.
-	 * If the file does not exist, no properties are loaded.
+	 * Loads properties from the configuration file into memory, if the file exists.
 	 */
 	private void loadProperties() {
 		File configFile = getConfigFile();
@@ -61,10 +64,102 @@ public class Config {
 			                                                      StandardCharsets.UTF_8)) {
 				properties.load(reader);
 			} catch (IOException e) {
-				System.err.println(
-						"Unable to load properties from " + configFile.getAbsolutePath() + ": " + e.getMessage());
+				System.err.println("Unable to load properties: " + e.getMessage());
 			}
 		}
+	}
+	
+	/**
+	 * Exports all configuration properties as a JSON-like string.
+	 *
+	 * @return a JSON-formatted string containing all properties
+	 */
+	public String exportAsJson() {
+		return properties.stringPropertyNames().stream().collect(
+				Collectors.toMap(key -> key, properties::getProperty)).toString().replace("=", ":");
+	}
+	
+	/**
+	 * Searches for property keys containing the specified substring.
+	 *
+	 * @param searchQuery the substring to search for in keys
+	 * @return a List of matching keys
+	 */
+	public List<String> searchKeys(String searchQuery) {
+		searchQuery = searchQuery.replaceAll(" ", "_");
+		String finalSearchQuery = searchQuery;
+		return properties.stringPropertyNames().stream().filter(key -> key.contains(finalSearchQuery)).collect(
+				Collectors.toList());
+	}
+	
+	/**
+	 * Clears all properties within a specific section.
+	 *
+	 * @param section the section name to clear
+	 */
+	public void clearSection(String section) {
+		properties.stringPropertyNames().stream().filter(key -> key.startsWith(section + ".")).collect(
+				Collectors.toList()).forEach(properties::remove);
+		saveProperties("Cleared Section: " + section);
+	}
+	
+	/**
+	 * Backs up the current configuration to a specified file.
+	 *
+	 * @param backupFileName the file name to save the backup
+	 */
+	public void backupConfiguration(String backupFileName) {
+		try (OutputStream output = new FileOutputStream(backupFileName)) {
+			properties.store(output, "Backup Configuration");
+		} catch (IOException e) {
+			System.err.println("Error backing up configuration: " + e.getMessage());
+		}
+	}
+	
+	/**
+	 * Restores the configuration from a backup file.
+	 *
+	 * @param backupFileName the file name of the backup to restore
+	 */
+	public void restoreConfiguration(String backupFileName) {
+		try (InputStream input = new FileInputStream(backupFileName)) {
+			properties.clear();
+			properties.load(input);
+			saveProperties("Restored from Backup");
+		} catch (IOException e) {
+			System.err.println("Error restoring configuration: " + e.getMessage());
+		}
+	}
+	
+	/**
+	 * Changes the configuration file name and optionally migrates the current data to the new file.
+	 *
+	 * @param newFileName the new file name for the configuration
+	 * @param migrateData if true, the current properties are saved to the new file
+	 */
+	public void changeFileName(String newFileName, boolean migrateData) {
+		if (migrateData) {
+			saveProperties("Migrated to new file: " + newFileName);
+		}
+		this.fileName = newFileName;
+	}
+	
+	/**
+	 * Imports properties from a Map and saves the updated configuration.
+	 *
+	 * @param map the Map containing key-value pairs to add or update in the configuration
+	 */
+	public void importFromMap(Map<String, String> map) {
+		properties.putAll(map);
+		saveProperties("Imported Properties");
+	}
+	
+	/**
+	 * Reloads the configuration file into memory, overwriting any unsaved changes.
+	 */
+	public synchronized void reloadProperties() {
+		properties.clear();
+		loadProperties();
 	}
 	
 	/**
@@ -88,6 +183,7 @@ public class Config {
 	 * @param comment an optional comment describing the property
 	 */
 	public void setProperty(String key, String value, String comment) {
+		key = key.replaceAll(" ", "_");
 		properties.putWithComment(key, value, comment);
 		saveProperties("Configuration and Localization");
 	}
@@ -102,6 +198,7 @@ public class Config {
 	public String getProperty(String key, String defaultValue) {
 		String value = properties.getProperty(key);
 		if (value == null) {
+			key = key.replaceAll(" ", "_");
 			properties.put(key, defaultValue);
 			saveProperties("Configuration and Localization");
 			return defaultValue;
@@ -129,17 +226,17 @@ public class Config {
 	}
 	
 	/**
-	 * Removes a property from the configuration and saves the updated configuration.
+	 * Removes a property and saves the updated configuration.
 	 *
 	 * @param key the key of the property to remove
-	 * @return true if the property was removed, false if it did not exist
+	 * @return true if the property was removed, false otherwise
 	 */
 	public boolean removeProperty(String key) {
-		if (properties.remove(key) != null) {
+		boolean removed = properties.remove(key) != null;
+		if (removed) {
 			saveProperties("Configuration Updated");
-			return true;
 		}
-		return false;
+		return removed;
 	}
 	
 	/**
@@ -177,20 +274,6 @@ public class Config {
 		return properties.stringPropertyNames().stream().collect(Collectors.toMap(key -> key, properties::getProperty));
 	}
 	
-	/**
-	 * Loads properties from an InputStream and saves the updated configuration.
-	 *
-	 * @param inputStream the InputStream containing properties data
-	 */
-	public void loadFromInputStream(InputStream inputStream) {
-		try (InputStreamReader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
-			properties.load(reader);
-			saveProperties("Configuration Updated from Stream");
-		} catch (IOException e) {
-			System.err.println("Error loading properties from InputStream: " + e.getMessage());
-		}
-	}
-	
 	/// CommentedProperties inner class for handling comments and sections
 	private static final class CommentedProperties extends Properties {
 		private final LinkedHashMap<String, String> comments = new LinkedHashMap<>();
@@ -219,28 +302,42 @@ public class Config {
 				writer.println("# " + new Date());
 				if (header != null) {
 					writer.println("# " + header);
+					writer.println();
 				}
-				writer.println();
 				
+				// Organize properties by sections
 				Map<String, List<String>> sections = organizeBySections();
+				boolean firstSection = true;
+				
 				for (Map.Entry<String, List<String>> entry : sections.entrySet()) {
 					String section = entry.getKey();
-					if (comments.containsKey(section)) {
-						writer.println();
-						writer.println(comments.get(section));
+					List<String> keys = entry.getValue();
+					
+					if (!firstSection) {
+						writer.println(); // Add spacing between sections
 					}
-					for (String key : entry.getValue()) {
+					firstSection = false;
+					
+					// Write section header
+					if (comments.containsKey(section)) {
+						writer.println(comments.get(section)); // Section comment
+					} else {
+						writer.println("# " + capitalize(section)); // Default section header
+					}
+					
+					// Write keys and their comments/values
+					for (String key : keys) {
 						if (comments.containsKey(key)) {
-							writer.println(comments.get(key));
+							writer.println(comments.get(key)); // Write key-specific comment
 						}
-						writer.println(key + "=" + getProperty(key));
+						writer.println(key + "=" + getProperty(key)); // Write key=value
 					}
 				}
 			}
 		}
 		
 		private Map<String, List<String>> organizeBySections() {
-			Map<String, List<String>> sections = new TreeMap<>();
+			Map<String, List<String>> sections = new LinkedHashMap<>();
 			for (String key : stringPropertyNames()) {
 				String section = getSection(key);
 				sections.computeIfAbsent(section, k -> new ArrayList<>()).add(key);
