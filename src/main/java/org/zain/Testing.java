@@ -1,12 +1,12 @@
-package org.example;
+package org.zain;
 
-public class Main {
+public class Testing {
 	public static void main(String[] args) {
-		String configFileName = "configuration/test_config.properties";
-		String localeFileName = "locale/locale.properties";
+		String configFileName = "configuration/test_config.conf";
+		String localeFileName = "locale/locale.conf";
 		
 		Config config = new Config(configFileName, true);
-		Config locale = new Config(localeFileName, true);
+		Locale locale = new Locale(localeFileName, true);
 		
 		config.setProperty("Application Settings.name", "TestApp", "The name of the application");
 		config.setProperty("Application Settings.version", "1.0.0", "The version of the application");
@@ -20,6 +20,9 @@ public class Main {
 		System.out.println("User settings search: " + config.searchKeys("User Settings"));
 		
 		System.out.println(
-				"Localized Message: " + locale.getLocalizedMessage("user.greeting", "Welcome to the application!"));
+				"Localized Message: " + locale.getLocalization("user.greeting", "Welcome to the application!"));
+		System.out.println("Doesnt exist: " + locale.getLocalization("test.value", "This is the text"));
+		
+		locale.backupConfiguration("locale/backupLocale.conf", true);
 	}
 }

@@ -1,4 +1,4 @@
-package org.example;
+package org.zain;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -36,6 +36,15 @@ public class Config {
 			System.err.println("Error determining application path: " + e.getMessage());
 			return null;
 		}
+	}
+	
+	/**
+	 * File name getter
+	 *
+	 * @return the file name of the config file
+	 */
+	public String getFileName() {
+		return fileName;
 	}
 	
 	/**
@@ -98,8 +107,8 @@ public class Config {
 	 * @param section the section name to clear
 	 */
 	public void clearSection(String section) {
-		properties.stringPropertyNames().stream().filter(key -> key.startsWith(section + ".")).collect(
-				Collectors.toList()).forEach(properties::remove);
+		properties.stringPropertyNames().stream().filter(key -> key.startsWith(section + ".")).toList().forEach(
+				properties::remove);
 		saveProperties("Cleared Section: " + section);
 	}
 	
@@ -107,8 +116,12 @@ public class Config {
 	 * Backs up the current configuration to a specified file.
 	 *
 	 * @param backupFileName the file name to save the backup
+	 * @param useAppDir      use the location from the jar directory
 	 */
-	public void backupConfiguration(String backupFileName) {
+	public void backupConfiguration(String backupFileName, boolean useAppDir) {
+		if (useAppDir) {
+			backupFileName = getAppPath() + File.separator + backupFileName;
+		}
 		try (OutputStream output = new FileOutputStream(backupFileName)) {
 			properties.store(output, "Backup Configuration");
 		} catch (IOException e) {
@@ -120,8 +133,12 @@ public class Config {
 	 * Restores the configuration from a backup file.
 	 *
 	 * @param backupFileName the file name of the backup to restore
+	 * @param useAppDir      use the location from the jar directory
 	 */
-	public void restoreConfiguration(String backupFileName) {
+	public void restoreConfiguration(String backupFileName, boolean useAppDir) {
+		if (useAppDir) {
+			backupFileName = getAppPath() + File.separator + backupFileName;
+		}
 		try (InputStream input = new FileInputStream(backupFileName)) {
 			properties.clear();
 			properties.load(input);
@@ -204,17 +221,6 @@ public class Config {
 			return defaultValue;
 		}
 		return value;
-	}
-	
-	/**
-	 * Retrieves a localized message for a given key or sets and returns a default value if the key does not exist.
-	 *
-	 * @param key          the key of the localized message
-	 * @param defaultValue the default value to return if the key does not exist
-	 * @return the localized message
-	 */
-	public synchronized String getLocalizedMessage(String key, String defaultValue) {
-		return getProperty(key, defaultValue);
 	}
 	
 	/**
