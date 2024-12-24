@@ -5,64 +5,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
+// TODO: ADD SUPPORT FOR MULTIPLE PARAMETERS
+
 /// Config Utility Class To Create Dynamic Config Files
 public class Config {
+	private static final EventManager eventManager = new EventManager();
+	private static boolean enableEvents = false;
 	private final boolean useAppDir;
 	private final CommentedProperties properties = new CommentedProperties();
 	private String fileName;
-	private boolean enableEvents = false;
-	private boolean isConfigLoadedSet = false;
-	private boolean isConfigNotLoadedSet = false;
-	private boolean isPropertyCreatedSet = false;
-	private boolean isConfigMigratedSet = false;
-	private boolean isConfigReloadedSet = false;
-	private boolean isConfigResetSet = false;
-	private boolean isConfigRestoredSet = false;
-	private boolean isDefaultConfigLoadedSet = false;
-	private boolean isFileNameChangedSet = false;
-	private boolean arePropertiesImportedSet = false;
-	private boolean isPropertyRemovedSet = false;
-	private boolean isPropertyNotRemovedSet = false;
-	private boolean isSectionClearedSet = false;
-	private boolean isSearchKeysSet = false;
-	private boolean isConfigBackupSuccessSet = false;
-	private boolean isConfigBackupFailSet = false;
-	private boolean isConfigFileDeletedSet = false;
-	private boolean isConfigFileDeleteFailedSet = false;
-	private boolean isConfigFileMissingSet = false;
-	private boolean isConfigLoadedPartiallySet = false;
-	private LoadConfigEventFail onConfigNotLoaded = (IOException exception) -> System.err.println(
-			"Error loading config at: " + this.getAbsolutePath() + ": " + exception.getMessage());
-	private LoadConfigEventPass onConfigLoaded = (String path) -> System.out.println(
-			"Config has been created at: " + path);
-	private ReloadConfigEvent onConfigReloaded = () -> System.out.println("Config has been reloaded");
-	private PropertyEvent onPropertyCreated = (key, value) -> System.out.println(
-			"Property: '" + key + "', Value: '" + value + "' has been added");
-	private PropertyEvent onPropertyRemoved = (key, value) -> System.out.println(
-			"Property: '" + key + "' has been removed");
-	private PropertyEvent onPropertyNotRemoved = (key, value) -> System.err.println(
-			"Property: '" + key + "' could not be removed!");
-	private ClearSectionEvent onSectionCleared = (String section) -> System.out.println("Cleared section: " + section);
-	private RestoreConfigEvent onConfigRestored = (String path) -> System.out.println("Config restored from: " + path);
-	private MigrateConfigEvent onConfigMigrated = (String path) -> System.out.println("Migrated to new file: " + path);
-	private ImportedPropertiesEvent onPropertiesImported = () -> System.out.println("Properties Imported.");
-	private ResetConfigEvent onConfigReset = () -> System.out.println("Config has been reset.");
-	private LoadedDefaultConfigEvent onDefaultConfigLoaded = (String path) -> System.out.println(
-			"Loaded default properties from: " + path);
-	private FileNameChangeEvent onFileNameChanged = (String name) -> System.out.println("File name changed: " + name);
-	private SearchKeyEvent onSearchKeys = (String key) -> System.out.println("Searching keys: " + key);
-	private ConfigBackupSuccessEvent onConfigBackupSuccess = (String name) -> System.out.println(
-			"Backed up config: " + name);
-	private ConfigBackupFailEvent onConfigBackupFail = (IOException exception) -> System.err.println(
-			"Failed to backup config: " + exception.getMessage());
-	private ConfigFileDeletedEvent onConfigFileDeleted = (String path) -> System.out.println(
-			"Config file deleted: " + path);
-	private ConfigFileDeleteFailedEvent onConfigFileDeleteFailed = (String path) -> System.err.println(
-			"Failed to delete config file: " + path);
-	private ConfigFileMissingEvent onConfigFileMissing = (String path) -> System.err.println(
-			"Config file doesn't exist: " + path);
-	private ConfigLoadedPartiallyEvent onConfigLoadedPartially = (int loadedProperties, int totalProperties) -> System.out.println(
-			"Partially loaded config: " + loadedProperties + "/" + totalProperties + " properties");
 	
 	/**
 	 * Initializes the Config object with the specified file name and directory usage flag.
@@ -98,12 +49,9 @@ public class Config {
 		searchQuery = searchQuery.replaceAll(" ", "_");
 		String finalSearchQuery = searchQuery;
 		
-		if (enableEvents || isSearchKeysSet) {
-			onSearchKeys.onEvent(searchQuery);
-		}
+		eventManager.triggerEvent(Event.SEARCH_KEYS, searchQuery);
 		
-		return properties.stringPropertyNames().stream().filter(key -> key.contains(finalSearchQuery)).collect(
-				Collectors.toList());
+		return properties.stringPropertyNames().stream().filter(key -> key.contains(finalSearchQuery)).collect(Collectors.toList());
 	}
 	
 	/**
@@ -117,9 +65,7 @@ public class Config {
 			removeProperty(key);
 		});
 		saveProperties("Cleared Section: " + section);
-		if (enableEvents || isSectionClearedSet) {
-			onSectionCleared.onEvent(section);
-		}
+		eventManager.triggerEvent(Event.SECTION_CLEARED, section);
 	}
 	
 	/**
@@ -128,7 +74,7 @@ public class Config {
 	 * @param enableEvents whether events will be enabled
 	 */
 	public void setEnableEvents(boolean enableEvents) {
-		this.enableEvents = enableEvents;
+		Config.enableEvents = enableEvents;
 	}
 	
 	/**
@@ -140,14 +86,10 @@ public class Config {
 	public void changeFileName(String newFileName, boolean migrateData) {
 		if (migrateData) {
 			saveProperties("Migrated data to new file: " + newFileName);
-			if (enableEvents || isConfigMigratedSet) {
-				onConfigMigrated.onEvent(newFileName);
-			}
+			eventManager.triggerEvent(Event.CONFIG_MIGRATED, newFileName);
 		}
 		this.fileName = newFileName;
-		if (enableEvents || isFileNameChangedSet) {
-			onFileNameChanged.onEvent(newFileName);
-		}
+		eventManager.triggerEvent(Event.FILE_NAME_CHANGED, newFileName);
 	}
 	
 	/**
@@ -156,27 +98,21 @@ public class Config {
 	public void loadProperties() {
 		File configFile = getConfigFile();
 		if (configFile.exists()) {
-			try (InputStreamReader reader = new InputStreamReader(new FileInputStream(configFile),
-			                                                      StandardCharsets.UTF_8)) {
+			try (InputStreamReader reader = new InputStreamReader(new FileInputStream(configFile), StandardCharsets.UTF_8)) {
 				Properties tempProperties = new Properties();
 				tempProperties.load(reader);
 				int loaded = tempProperties.size();
 				int total = properties.stringPropertyNames().size();
 				properties.putAll(tempProperties);
 				if (loaded < total) {
-					if (enableEvents || isConfigLoadedPartiallySet) {
-						onConfigLoadedPartially.onEvent(loaded, total);
-					}
-				} else if (enableEvents || isConfigLoadedSet) {
-					onConfigLoaded.onPass(configFile.getAbsolutePath());
+				} else {
+					eventManager.triggerEvent(Event.CONFIG_LOADED, configFile.getAbsolutePath());
 				}
 			} catch (IOException e) {
-				if (enableEvents || isConfigNotLoadedSet) {
-					onConfigNotLoaded.onFail(e);
-				}
+				eventManager.triggerEvent(Event.CONFIG_NOT_LOADED, e);
 			}
-		} else if (enableEvents || isConfigFileMissingSet) {
-			onConfigFileMissing.onEvent(configFile.getAbsolutePath());
+		} else {
+			eventManager.triggerEvent(Event.CONFIG_FILE_MISSING, configFile.getAbsolutePath());
 		}
 	}
 	
@@ -186,13 +122,9 @@ public class Config {
 	public void deleteConfigFile() {
 		File configFile = getConfigFile();
 		if (configFile.exists() && configFile.delete()) {
-			if (enableEvents || isConfigFileDeletedSet) {
-				onConfigFileDeleted.onEvent(configFile.getAbsolutePath());
-			}
+			eventManager.triggerEvent(Event.CONFIG_FILE_DELETED, configFile.getAbsolutePath());
 		} else {
-			if (enableEvents || isConfigFileDeleteFailedSet) {
-				onConfigFileDeleteFailed.onEvent(configFile.getAbsolutePath());
-			}
+			eventManager.triggerEvent(Event.CONFIG_FILE_DELETE_FAILED, configFile.getAbsolutePath());
 		}
 	}
 	
@@ -211,9 +143,7 @@ public class Config {
 	public synchronized void reloadProperties() {
 		properties.clear();
 		loadProperties();
-		if (enableEvents || isConfigReloadedSet) {
-			onConfigReloaded.onEvent();
-		}
+		eventManager.triggerEvent(Event.CONFIG_RELOADED, "");
 	}
 	
 	/**
@@ -222,9 +152,7 @@ public class Config {
 	public void resetConfiguration() {
 		properties.clear();
 		saveProperties("Reset Configuration");
-		if (enableEvents || isConfigResetSet) {
-			onConfigReset.onEvent();
-		}
+		eventManager.triggerEvent(Event.CONFIG_RESET, "");
 	}
 	
 	/**
@@ -237,10 +165,18 @@ public class Config {
 	public void setProperty(String key, String value, String comment) {
 		key = key.replaceAll(" ", "_");
 		properties.putWithComment(key, value, comment);
-		if (enableEvents || isPropertyCreatedSet) {
-			onPropertyCreated.onEvent(key, value);
-		}
+		eventManager.triggerEvent(Event.PROPERTY_CREATED, key);
 		saveProperties("Configuration and Localization");
+	}
+	
+	/**
+	 * Sets a property with an optional comment and immediately saves the updated configuration.
+	 *
+	 * @param key   the key of the property
+	 * @param value the value of the property
+	 */
+	public void setProperty(String key, String value) {
+		setProperty(key, value, null);
 	}
 	
 	/**
@@ -255,9 +191,7 @@ public class Config {
 		if (value == null) {
 			key = key.replaceAll(" ", "_");
 			properties.put(key, defaultValue);
-			if (enableEvents || isPropertyCreatedSet) {
-				onPropertyCreated.onEvent(key, defaultValue);
-			}
+			eventManager.triggerEvent(Event.PROPERTY_CREATED, key);
 			saveProperties("Configuration and Localization");
 			return defaultValue;
 		}
@@ -278,19 +212,17 @@ public class Config {
 	 * Removes a property and saves the updated configuration.
 	 *
 	 * @param key the key of the property to remove
+	 * @return true if the property was successfully removed, false otherwise
 	 */
 	public boolean removeProperty(String key) {
 		key = key.replaceAll(" ", "_");
 		boolean removed = properties.remove(key) != null;
 		if (removed) {
-			if (enableEvents || isPropertyRemovedSet) {
-				onPropertyRemoved.onEvent(key, properties.getProperty(key));
-			}
+			eventManager.triggerEvent(Event.PROPERTY_REMOVED, properties.getProperty(key));
 			saveProperties("Configuration Updated");
 		} else {
-			if (enableEvents || isPropertyNotRemovedSet) {
-				onPropertyNotRemoved.onEvent(key, properties.getProperty(key));
-			}
+			eventManager.triggerEvent(Event.PROPERTY_NOT_REMOVED, properties.getProperty(key));
+			
 		}
 		return removed;
 	}
@@ -305,9 +237,7 @@ public class Config {
 			if (defaultStream != null) {
 				properties.load(new InputStreamReader(defaultStream, StandardCharsets.UTF_8));
 				saveProperties("Loaded Default Configuration");
-				if (enableEvents || isDefaultConfigLoadedSet) {
-					onDefaultConfigLoaded.onEvent(defaultFileName);
-				}
+				eventManager.triggerEvent(Event.DEFAULT_CONFIG_LOADED, defaultFileName);
 			}
 		} catch (IOException e) {
 			System.err.println("Error loading default properties: " + e.getMessage());
@@ -321,8 +251,7 @@ public class Config {
 	 */
 	private String getAppPath() {
 		try {
-			return new File(
-					Config.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath()).getParent();
+			return new File(Config.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath()).getParent();
 		} catch (Exception e) {
 			System.err.println("Error determining application path: " + e.getMessage());
 			return null;
@@ -384,13 +313,9 @@ public class Config {
 		}
 		try (OutputStream output = new FileOutputStream(backupFileName)) {
 			properties.store(output, "Backup Configuration");
-			if (enableEvents || isConfigBackupSuccessSet) {
-				onConfigBackupSuccess.onSuccess(backupFileName);
-			}
+			eventManager.triggerEvent(Event.CONFIG_BACKUP_SUCCESS, backupFileName);
 		} catch (IOException e) {
-			if (enableEvents || isConfigBackupFailSet) {
-				onConfigBackupFail.onFail(e);
-			}
+			eventManager.triggerEvent(Event.CONFIG_BACKUP_FAIL, e);
 		}
 	}
 	
@@ -408,9 +333,7 @@ public class Config {
 			properties.clear();
 			properties.load(input);
 			saveProperties("Restored from Backup");
-			if (enableEvents || isConfigRestoredSet) {
-				onConfigRestored.onEvent(backupFileName);
-			}
+			eventManager.triggerEvent(Event.CONFIG_RESTORED, backupFileName);
 		} catch (IOException e) {
 			System.err.println("Error restoring configuration: " + e.getMessage());
 		}
@@ -442,14 +365,10 @@ public class Config {
 	public void importFromMap(Map<String, String> map) {
 		for (Map.Entry<String, String> entry : map.entrySet()) {
 			properties.put(entry.getKey(), entry.getValue());
-			if (enableEvents || isPropertyCreatedSet) {
-				onPropertyCreated.onEvent(entry.getKey(), entry.getValue());
-			}
+			eventManager.triggerEvent(Event.PROPERTY_CREATED, entry.getKey());
 		}
 		saveProperties("Imported Properties");
-		if (enableEvents || arePropertiesImportedSet) {
-			onPropertiesImported.onEvent();
-		}
+		eventManager.triggerEvent(Event.PROPERTIES_IMPORTED, "");
 	}
 	
 	/**
@@ -458,306 +377,96 @@ public class Config {
 	 * @return a JSON-formatted string containing all properties
 	 */
 	public String exportAsJson() {
-		return properties.stringPropertyNames().stream().collect(
-				Collectors.toMap(key -> key, properties::getProperty)).toString().replace("=", ":");
+		return properties.stringPropertyNames().stream().collect(Collectors.toMap(key -> key, properties::getProperty)).toString().replace("=", ":");
 	}
 	
 	/**
-	 * Sets the event handler for when the configuration is successfully loaded.
-	 *
-	 * @param onConfigLoaded the event handler to be triggered when the config is loaded
+	 * Enum representing various events that can be triggered within the system.
 	 */
-	public void setOnConfigLoaded(LoadConfigEventPass onConfigLoaded) {
-		this.onConfigLoaded = onConfigLoaded;
-		isConfigLoadedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration fails to load.
-	 *
-	 * @param onConfigNotLoaded the event handler to be triggered when the config fails to load
-	 */
-	public void setOnConfigNotLoaded(LoadConfigEventFail onConfigNotLoaded) {
-		this.onConfigNotLoaded = onConfigNotLoaded;
-		isConfigNotLoadedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when a property is created.
-	 *
-	 * @param onPropertyCreated the event handler to be triggered when a property is created
-	 */
-	public void setOnPropertyCreated(PropertyEvent onPropertyCreated) {
-		this.onPropertyCreated = onPropertyCreated;
-		isPropertyCreatedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration is migrated to a new file.
-	 *
-	 * @param onConfigMigrated the event handler to be triggered when the config is migrated
-	 */
-	public void setOnConfigMigrated(MigrateConfigEvent onConfigMigrated) {
-		this.onConfigMigrated = onConfigMigrated;
-		isConfigMigratedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration is reloaded.
-	 *
-	 * @param onConfigReloaded the event handler to be triggered when the config is reloaded
-	 */
-	public void setOnConfigReloaded(ReloadConfigEvent onConfigReloaded) {
-		this.onConfigReloaded = onConfigReloaded;
-		isConfigReloadedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration is reset.
-	 *
-	 * @param onConfigReset the event handler to be triggered when the config is reset
-	 */
-	public void setOnConfigReset(ResetConfigEvent onConfigReset) {
-		this.onConfigReset = onConfigReset;
-		isConfigResetSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration is restored from a backup.
-	 *
-	 * @param onConfigRestored the event handler to be triggered when the config is restored
-	 */
-	public void setOnConfigRestored(RestoreConfigEvent onConfigRestored) {
-		this.onConfigRestored = onConfigRestored;
-		isConfigRestoredSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the default configuration is loaded.
-	 *
-	 * @param onDefaultConfigLoaded the event handler to be triggered when the default config is loaded
-	 */
-	public void setOnDefaultConfigLoaded(LoadedDefaultConfigEvent onDefaultConfigLoaded) {
-		this.onDefaultConfigLoaded = onDefaultConfigLoaded;
-		isDefaultConfigLoadedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the file name is changed.
-	 *
-	 * @param onFileNameChanged the event handler to be triggered when the file name is changed
-	 */
-	public void setOnFileNameChanged(FileNameChangeEvent onFileNameChanged) {
-		this.onFileNameChanged = onFileNameChanged;
-		isFileNameChangedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when properties are imported.
-	 *
-	 * @param onPropertiesImported the event handler to be triggered when properties are imported
-	 */
-	public void setOnPropertiesImported(ImportedPropertiesEvent onPropertiesImported) {
-		this.onPropertiesImported = onPropertiesImported;
-		arePropertiesImportedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when a property is removed.
-	 *
-	 * @param onPropertyRemoved the event handler to be triggered when a property is removed
-	 */
-	public void setOnPropertyRemoved(PropertyEvent onPropertyRemoved) {
-		this.onPropertyRemoved = onPropertyRemoved;
-		isPropertyRemovedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when a property fails to be removed.
-	 *
-	 * @param onPropertyNotRemoved the event handler to be triggered when a property fails to be removed
-	 */
-	public void setOnPropertyNotRemoved(PropertyEvent onPropertyNotRemoved) {
-		this.onPropertyNotRemoved = onPropertyNotRemoved;
-		isPropertyNotRemovedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when a section of the configuration is cleared.
-	 *
-	 * @param onSectionCleared the event handler to be triggered when a section is cleared
-	 */
-	public void setOnSectionCleared(ClearSectionEvent onSectionCleared) {
-		this.onSectionCleared = onSectionCleared;
-		isSectionClearedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when a search key is used.
-	 *
-	 * @param onSearchKeys the event handler to be triggered when a search key is used
-	 */
-	public void setOnSearchKeys(SearchKeyEvent onSearchKeys) {
-		this.onSearchKeys = onSearchKeys;
-		isSearchKeysSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration backup is successful.
-	 *
-	 * @param path the event handler to be triggered when the config backup is successful
-	 */
-	public void setOnConfigBackupSuccess(ConfigBackupSuccessEvent path) {
-		this.onConfigBackupSuccess = path;
-		isConfigBackupSuccessSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration backup fails.
-	 *
-	 * @param exception the event handler to be triggered when the config backup fails
-	 */
-	public void setOnConfigBackupFail(ConfigBackupFailEvent exception) {
-		this.onConfigBackupFail = exception;
-		isConfigBackupFailSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration file is deleted.
-	 *
-	 * @param path the event handler to be triggered when the config file is deleted
-	 */
-	public void setOnConfigFileDeleted(ConfigFileDeletedEvent path) {
-		this.onConfigFileDeleted = path;
-		isConfigFileDeletedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration file deletion fails.
-	 *
-	 * @param path the event handler to be triggered when the config file deletion fails
-	 */
-	public void setOnConfigFileDeleteFailed(ConfigFileDeleteFailedEvent path) {
-		this.onConfigFileDeleteFailed = path;
-		isConfigFileDeleteFailedSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration file is missing.
-	 *
-	 * @param path the event handler to be triggered when the config file is missing
-	 */
-	public void setOnConfigFileMissing(ConfigFileMissingEvent path) {
-		this.onConfigFileMissing = path;
-		isConfigFileMissingSet = true;
-	}
-	
-	/**
-	 * Sets the event handler for when the configuration is partially loaded.
-	 *
-	 * @param path the event handler to be triggered when the config is partially loaded
-	 */
-	public void setOnConfigLoadedPartially(ConfigLoadedPartiallyEvent path) {
-		this.onConfigLoadedPartially = path;
-		isConfigLoadedPartiallySet = true;
+	public enum Event {
+		CONFIG_NOT_LOADED, CONFIG_LOADED, CONFIG_RELOADED, PROPERTY_CREATED, PROPERTY_REMOVED, PROPERTY_NOT_REMOVED, SECTION_CLEARED, CONFIG_RESTORED, CONFIG_MIGRATED, PROPERTIES_IMPORTED, CONFIG_RESET, DEFAULT_CONFIG_LOADED, FILE_NAME_CHANGED, SEARCH_KEYS, CONFIG_BACKUP_SUCCESS, CONFIG_BACKUP_FAIL, CONFIG_FILE_DELETED, CONFIG_FILE_DELETE_FAILED, CONFIG_FILE_MISSING, CONFIG_LOADED_PARTIALLY
 	}
 	
 	@FunctionalInterface
-	public interface LoadConfigEventFail {
-		void onFail(IOException e);
+	public interface EventHandler<T> {
+		void accept(T parameter);
 	}
 	
-	@FunctionalInterface
-	public interface LoadConfigEventPass {
-		void onPass(String path);
+	public static class EventManager {
+		private static final Map<Event, EventHandler<?>> registeredHandlers = new HashMap<>();
+		private final Map<Event, EventHandler<?>> defaultHandlers = new HashMap<>();
+		
+		/**
+		 * Constructor that initializes the default handlers for various events.
+		 */
+		public EventManager() {
+			// Default event handlers initialization
+			defaultHandlers.put(Event.CONFIG_NOT_LOADED, (IOException exception) -> System.err.println("Error loading config: " + exception.getMessage()));
+			defaultHandlers.put(Event.CONFIG_LOADED, (path) -> System.out.println("Config has been created at: " + path));
+			defaultHandlers.put(Event.CONFIG_RELOADED, (String _) -> System.out.println("Config has been reloaded"));
+			defaultHandlers.put(Event.PROPERTY_CREATED, (key) -> System.out.println("Property: '" + key + "', has been added"));
+			defaultHandlers.put(Event.PROPERTY_REMOVED, (key) -> System.out.println("Property: '" + key + "' has been removed"));
+			defaultHandlers.put(Event.PROPERTY_NOT_REMOVED, (key) -> System.err.println("Property: '" + key + "' could not be removed!"));
+			defaultHandlers.put(Event.SECTION_CLEARED, (section) -> System.out.println("Cleared section: " + section));
+			defaultHandlers.put(Event.CONFIG_RESTORED, (path) -> System.out.println("Config restored from: " + path));
+			defaultHandlers.put(Event.CONFIG_MIGRATED, (path) -> System.out.println("Migrated to new file: " + path));
+			defaultHandlers.put(Event.PROPERTIES_IMPORTED, (String _) -> System.out.println("Properties Imported."));
+			defaultHandlers.put(Event.CONFIG_RESET, (String _) -> System.out.println("Config has been reset."));
+			defaultHandlers.put(Event.DEFAULT_CONFIG_LOADED, (path) -> System.out.println("Loaded default properties from: " + path));
+			defaultHandlers.put(Event.FILE_NAME_CHANGED, (name) -> System.out.println("File name changed: " + name));
+			defaultHandlers.put(Event.SEARCH_KEYS, (key) -> System.out.println("Searching keys: " + key));
+			defaultHandlers.put(Event.CONFIG_BACKUP_SUCCESS, (name) -> System.out.println("Backed up config: " + name));
+			defaultHandlers.put(Event.CONFIG_BACKUP_FAIL, (IOException exception) -> System.err.println("Failed to backup config: " + exception.getMessage()));
+			defaultHandlers.put(Event.CONFIG_FILE_DELETED, (path) -> System.out.println("Config file deleted: " + path));
+			defaultHandlers.put(Event.CONFIG_FILE_DELETE_FAILED, (path) -> System.err.println("Failed to delete config file: " + path));
+			defaultHandlers.put(Event.CONFIG_FILE_MISSING, (path) -> System.err.println("Config file doesn't exist: " + path));
+		}
+		
+		/**
+		 * Registers a custom event handler for an event with a single parameter.
+		 *
+		 * @param event        the event to register the handler for
+		 * @param eventHandler the event handler to handle the event
+		 * @param <T>          the type of the parameter for the event
+		 */
+		public static <T> void registerEvent(Event event, EventHandler<T> eventHandler) {
+			registeredHandlers.put(event, eventHandler);
+		}
+		
+		/**
+		 * Triggers an event with a single parameter and calls the corresponding event handler.
+		 *
+		 * @param event     the event to trigger
+		 * @param parameter the parameter to pass to the event handler
+		 * @param <T>       the type of the parameter
+		 */
+		private <T> void triggerEvent(Event event, T parameter) {
+			if (!enableEvents) {
+				if (registeredHandlers.containsKey(event)) {
+					EventHandler<T> handler = (EventHandler<T>) registeredHandlers.get(event);
+					if (handler != null) {
+						handler.accept(parameter);
+					}
+				}
+				return;
+			}
+			
+			if (registeredHandlers.containsKey(event)) {
+				EventHandler<T> handler = (EventHandler<T>) registeredHandlers.get(event);
+				if (handler != null) {
+					handler.accept(parameter);
+				}
+			} else if (defaultHandlers.containsKey(event)) {
+				EventHandler<T> handler = (EventHandler<T>) defaultHandlers.get(event);
+				if (handler != null) {
+					handler.accept(parameter);
+				}
+			} else {
+				System.out.println("No handler for event: " + event);
+			}
+		}
 	}
 	
-	@FunctionalInterface
-	public interface ReloadConfigEvent {
-		void onEvent();
-	}
-	
-	@FunctionalInterface
-	public interface PropertyEvent {
-		void onEvent(String key, String value);
-	}
-	
-	@FunctionalInterface
-	public interface ClearSectionEvent {
-		void onEvent(String clearedSection);
-	}
-	
-	@FunctionalInterface
-	public interface RestoreConfigEvent {
-		void onEvent(String restorePath);
-	}
-	
-	@FunctionalInterface
-	public interface MigrateConfigEvent {
-		void onEvent(String migratedPath);
-	}
-	
-	@FunctionalInterface
-	public interface ImportedPropertiesEvent {
-		void onEvent();
-	}
-	
-	@FunctionalInterface
-	public interface ResetConfigEvent {
-		void onEvent();
-	}
-	
-	@FunctionalInterface
-	public interface LoadedDefaultConfigEvent {
-		void onEvent(String loadedDefaultPath);
-	}
-	
-	@FunctionalInterface
-	public interface FileNameChangeEvent {
-		void onEvent(String newFile);
-	}
-	
-	@FunctionalInterface
-	public interface SearchKeyEvent {
-		void onEvent(String searchKey);
-	}
-	
-	@FunctionalInterface
-	public interface ConfigBackupSuccessEvent {
-		void onSuccess(String backupFileName);
-	}
-	
-	@FunctionalInterface
-	public interface ConfigBackupFailEvent {
-		void onFail(IOException exception);
-	}
-	
-	@FunctionalInterface
-	public interface ConfigFileDeletedEvent {
-		void onEvent(String path);
-	}
-	
-	@FunctionalInterface
-	public interface ConfigFileDeleteFailedEvent {
-		void onEvent(String path);
-	}
-	
-	@FunctionalInterface
-	public interface ConfigFileMissingEvent {
-		void onEvent(String path);
-	}
-	
-	@FunctionalInterface
-	public interface ConfigLoadedPartiallyEvent {
-		void onEvent(int loadedProperties, int totalProperties);
-	}
-	
-	/**
-	 * Inner class for handling properties with comments and organizing them into sections.
-	 * This class extends {@link Properties} and adds support for associating comments with keys
-	 * and grouping keys by sections. It provides functionality to store properties along with
-	 * their comments in a structured format.
-	 */
 	private static final class CommentedProperties extends Properties {
 		
 		// Stores comments associated with keys and sections
