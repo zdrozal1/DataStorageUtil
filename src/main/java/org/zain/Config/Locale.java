@@ -1,4 +1,4 @@
-package org.zain;
+package org.zain.Config;
 
 /// Class to create a Config object for localization
 public class Locale extends Config {
