@@ -1,4 +1,4 @@
-package org.zain.XmlUtils;
+package org.zain.DepreciatedXmlUtility;
 
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
@@ -21,7 +21,7 @@ public class XmlUtils<T> {
 	private List<T> elements;
 	
 	/**
-	 * Constructor that initializes the XmlUtils instance, automatically loading the container.
+	 * Constructor that initializes the DepreciatedXmlUtility instance, automatically loading the container.
 	 *
 	 * @param elementType the class type of the elements to be managed.
 	 * @param filePath    the file path to the XML data source.

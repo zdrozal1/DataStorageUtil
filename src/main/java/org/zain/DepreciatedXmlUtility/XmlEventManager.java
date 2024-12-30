@@ -1,4 +1,4 @@
-package org.zain.XmlUtils;
+package org.zain.DepreciatedXmlUtility;
 
 import java.util.List;
 import java.util.function.BiConsumer;

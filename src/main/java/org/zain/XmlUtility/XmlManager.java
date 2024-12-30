@@ -1,11 +1,11 @@
-package org.zain.NewXmlUtility;
+package org.zain.XmlUtility;
 
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Marshaller;
 import jakarta.xml.bind.Unmarshaller;
-import org.zain.NewXmlUtility.AnnotationTesting.BaseObjectIdentifier;
-import org.zain.NewXmlUtility.AnnotationTesting.ParentObjectIdentifier;
+import org.zain.XmlUtility.Annotations.BaseObjectIdentifier;
+import org.zain.XmlUtility.Annotations.ParentObjectIdentifier;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
@@ -102,7 +102,6 @@ public class XmlManager {
 	 * @param parentObject The class representing the parent object (e.g., {@code CustomerOrders}).
 	 * @param baseObject   The class representing the base object (e.g., {@code Order}).
 	 */
-	
 	public XmlManager(String filePath, Class<?> parentObject, Class<?> baseObject) {
 		this.filePath = filePath;
 		this.parentObject = parentObject;
@@ -121,68 +120,12 @@ public class XmlManager {
 	}
 	
 	/**
-	 * Processes the annotations on the specified object to identify the annotated field.
-	 * Ensures that only one field is annotated with the specified annotation.
-	 *
-	 * @param obj            The object to inspect for annotations.
-	 * @param annotationType The annotation type to look for.
-	 * @return The name of the annotated field.
-	 * @throws IllegalArgumentException If the input object or annotation type is null.
-	 * @throws IllegalStateException    If more than one field is annotated or no annotated field is found.
-	 */
-	public static String processAnnotations(Object obj, Class<?> annotationType) {
-		// Ensure the input object and annotation type are not null
-		if (obj == null) {
-			throw new IllegalArgumentException("Input object cannot be null");
-		}
-		if (annotationType == null) {
-			throw new IllegalArgumentException("Annotation type cannot be null");
-		}
-		
-		// Ensure the annotation type is indeed an annotation
-		if (!annotationType.isAnnotation()) {
-			throw new IllegalArgumentException(annotationType.getName() + " is not an annotation type.");
-		}
-		
-		// Get the class of the provided object
-		Class<?> clazz = obj.getClass();
-		
-		// Get all declared fields from the class
-		Field[] fields = clazz.getDeclaredFields();
-		
-		// Counter to track how many fields have the annotation
-		int annotatedCount = 0;
-		
-		// Iterate through all fields to check for annotations
-		for (Field field : fields) {
-			// Check if the field has the specified annotation
-			if (field.isAnnotationPresent((Class<? extends Annotation>) annotationType)) {
-				annotatedCount++;
-				// Ensure only one annotation exists in the class
-				if (annotatedCount > 1) {
-					throw new IllegalStateException("Only one field can be annotated with @" + annotationType.getSimpleName() + " in the class " + clazz.getName());
-				}
-				try {
-					field.setAccessible(true); // Ensure we can access private fields
-					return field.getName();
-				} catch (SecurityException e) {
-					throw new IllegalStateException("Failed to access field " + field.getName(), e);
-				}
-			}
-		}
-		
-		// If no annotated field is found, throw an exception
-		throw new IllegalStateException("No field annotated with @" + annotationType.getSimpleName() + " found in class " + clazz.getName());
-	}
-	
-	/**
 	 * Loads the parent object from the specified XML file. If the file does not exist, a new instance of the
 	 * parent object is created. The parent object class must be annotated with {@code @XmlRootElement}.
 	 *
 	 * @return The loaded or newly created parent object.
 	 * @throws JAXBException If an error occurs while loading the XML or instantiating the parent object.
 	 */
-	
 	public Object loadParentElement() throws JAXBException {
 		File file = new File(filePath);
 		if (!file.exists()) {
@@ -208,7 +151,6 @@ public class XmlManager {
 	 * @param parentObjectInstance The parent object to be saved to the XML file.
 	 * @throws JAXBException If an error occurs during the saving process.
 	 */
-	
 	private void saveParentObject(Object parentObjectInstance) throws JAXBException {
 		JAXBContext context = JAXBContext.newInstance(parentObject);
 		Marshaller marshaller = context.createMarshaller();
@@ -225,7 +167,6 @@ public class XmlManager {
 	 * @param baseObject The base object to be added or replaced in the parent object.
 	 * @throws JAXBException If an error occurs while adding or replacing the base object.
 	 */
-	
 	public void addOrReplaceBaseObject(Object baseObject) throws JAXBException {
 		Object parentElement = loadParentElement();
 		
@@ -309,7 +250,6 @@ public class XmlManager {
 	 * @param identifier The identifier of the base object to be deleted.
 	 * @throws JAXBException If an error occurs during the deletion process.
 	 */
-	
 	public void deleteBaseObject(String identifier) throws JAXBException {
 		Object parentElement = loadParentElement();
 		
@@ -338,6 +278,40 @@ public class XmlManager {
 	}
 	
 	/**
+	 * Finds a base object with the specified identifier in the parent object.
+	 *
+	 * @param identifier The identifier of the base object to find.
+	 * @return The base object if it exists, or {@code null} if not found.
+	 * @throws JAXBException If an error occurs during the loading or searching process.
+	 */
+	public Object getBaseObject(String identifier) throws JAXBException {
+		Object parentElement = loadParentElement();
+		
+		try {
+			// Retrieve the list of base objects from the parent object
+			Method getListMethod = findMethod(parentObject, "get", parentIdentifierField);
+			List<?> list = (List<?>) getListMethod.invoke(parentElement);
+			
+			if (list != null) {
+				// Retrieve the identifier field getter method for the base object
+				Method getIdMethod = findMethod(baseObject, "get", identifierField);
+				
+				// Iterate over the list to find the matching base object
+				for (Object baseObj : list) {
+					Object baseObjId = getIdMethod.invoke(baseObj);
+					if (identifier.equals(baseObjId)) {
+						return baseObj; // Return the matching base object
+					}
+				}
+			}
+			
+			return null; // Base object not found
+		} catch (Exception e) {
+			throw new JAXBException("Error finding base object", e);
+		}
+	}
+	
+	/**
 	 * Searches for the getter or setter method in the given class using reflection based on the provided method
 	 * prefix and field name.
 	 *
@@ -347,7 +321,6 @@ public class XmlManager {
 	 * @return The found method.
 	 * @throws NoSuchMethodException If no matching method is found.
 	 */
-	
 	private Method findMethod(Class<?> clazz, String prefix, String fieldName) throws NoSuchMethodException {
 		String methodName = prefix + fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
 		
@@ -364,6 +337,61 @@ public class XmlManager {
 		} catch (NoSuchMethodException e) {
 			throw new NoSuchMethodException("No setter method found with name " + methodName + " and parameter type List in class " + clazz.getName());
 		}
+	}
+	
+	/**
+	 * Processes the annotations on the specified object to identify the annotated field.
+	 * Ensures that only one field is annotated with the specified annotation.
+	 *
+	 * @param obj            The object to inspect for annotations.
+	 * @param annotationType The annotation type to look for.
+	 * @return The name of the annotated field.
+	 * @throws IllegalArgumentException If the input object or annotation type is null.
+	 * @throws IllegalStateException    If more than one field is annotated or no annotated field is found.
+	 */
+	private String processAnnotations(Object obj, Class<?> annotationType) {
+		// Ensure the input object and annotation type are not null
+		if (obj == null) {
+			throw new IllegalArgumentException("Input object cannot be null");
+		}
+		if (annotationType == null) {
+			throw new IllegalArgumentException("Annotation type cannot be null");
+		}
+		
+		// Ensure the annotation type is indeed an annotation
+		if (!annotationType.isAnnotation()) {
+			throw new IllegalArgumentException(annotationType.getName() + " is not an annotation type.");
+		}
+		
+		// Get the class of the provided object
+		Class<?> clazz = obj.getClass();
+		
+		// Get all declared fields from the class
+		Field[] fields = clazz.getDeclaredFields();
+		
+		// Counter to track how many fields have the annotation
+		int annotatedCount = 0;
+		
+		// Iterate through all fields to check for annotations
+		for (Field field : fields) {
+			// Check if the field has the specified annotation
+			if (field.isAnnotationPresent((Class<? extends Annotation>) annotationType)) {
+				annotatedCount++;
+				// Ensure only one annotation exists in the class
+				if (annotatedCount > 1) {
+					throw new IllegalStateException("Only one field can be annotated with @" + annotationType.getSimpleName() + " in the class " + clazz.getName());
+				}
+				try {
+					field.setAccessible(true); // Ensure we can access private fields
+					return field.getName();
+				} catch (SecurityException e) {
+					throw new IllegalStateException("Failed to access field " + field.getName(), e);
+				}
+			}
+		}
+		
+		// If no annotated field is found, throw an exception
+		throw new IllegalStateException("No field annotated with @" + annotationType.getSimpleName() + " found in class " + clazz.getName());
 	}
 	
 	/**

@@ -1,4 +1,4 @@
-package org.zain.XmlUtils;
+package org.zain.DepreciatedXmlUtility;
 
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
