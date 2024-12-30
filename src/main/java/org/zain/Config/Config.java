@@ -33,10 +33,23 @@ public class Config {
 	 */
 	public void saveProperties(String header) {
 		try (OutputStream output = new FileOutputStream(getConfigFile())) {
-			properties.storeWithComments(output, header);
+			// If header is provided, write it in the section header format
+			if (header != null && !header.isEmpty()) {
+				properties.storeWithComments(output, "[" + header + "]");
+			}
+			properties.storeWithComments(output, null); // Save properties as usual
 		} catch (IOException e) {
 			System.err.println("Error saving properties to file: " + e.getMessage());
 		}
+	}
+	
+	public void clearSection(String section) {
+		properties.stringPropertyNames().stream().filter(key -> key.startsWith(section + ".")).toList().forEach(key -> {
+			properties.remove(key);
+			removeProperty(key);
+		});
+		saveProperties(section);  // Now saves with section header formatted as [Section]
+		eventManager.triggerEvent(Event.SECTION_CLEARED, section);
 	}
 	
 	/**
@@ -52,20 +65,6 @@ public class Config {
 		eventManager.triggerEvent(Event.SEARCH_KEYS, searchQuery);
 		
 		return properties.stringPropertyNames().stream().filter(key -> key.contains(finalSearchQuery)).collect(Collectors.toList());
-	}
-	
-	/**
-	 * Clears all properties within a specific section.
-	 *
-	 * @param section the section name to clear
-	 */
-	public void clearSection(String section) {
-		properties.stringPropertyNames().stream().filter(key -> key.startsWith(section + ".")).toList().forEach(key -> {
-			properties.remove(key);
-			removeProperty(key);
-		});
-		saveProperties("Cleared Section: " + section);
-		eventManager.triggerEvent(Event.SECTION_CLEARED, section);
 	}
 	
 	/**

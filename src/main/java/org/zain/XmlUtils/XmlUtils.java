@@ -11,13 +11,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class XmlUtils<T> {
 	
 	private final String filePath;
 	private final Class<T> elementType;
-	private List<T> elements;
 	private final XmlEventManager xmlEventManager = new XmlEventManager();
+	private List<T> elements;
 	
 	/**
 	 * Constructor that initializes the XmlUtils instance, automatically loading the container.
@@ -33,6 +34,38 @@ public class XmlUtils<T> {
 	}
 	
 	/**
+	 * Compares two objects based on specific fields to determine if they are equal.
+	 *
+	 * @param obj1       the first object to compare.
+	 * @param obj2       the second object to compare.
+	 * @param fieldNames the names of the fields to compare.
+	 * @return true if the objects are equal based on the specified fields, false otherwise.
+	 */
+	private static boolean equals(Object obj1, Object obj2, String... fieldNames) {
+		if (obj1 == obj2) {
+			return true;
+		}
+		if (obj1 == null || obj2 == null || !obj1.getClass().equals(obj2.getClass())) {
+			return false;
+		}
+		try {
+			for (String fieldName : fieldNames) {
+				Field field = obj1.getClass().getDeclaredField(fieldName);
+				field.setAccessible(true);
+				Object value1 = field.get(obj1);
+				Object value2 = field.get(obj2);
+				if (!Objects.equals(value1, value2)) {
+					return false;
+				}
+			}
+		} catch (NoSuchFieldException | IllegalAccessException e) {
+			e.printStackTrace();
+			return false;
+		}
+		return true;
+	}
+	
+	/**
 	 * Returns the XmlEventManager instance responsible for managing events related to XML operations.
 	 *
 	 * @return the XmlEventManager instance.
@@ -42,13 +75,20 @@ public class XmlUtils<T> {
 	}
 	
 	/**
+	 * Return List of elements inside elements
+	 */
+	public List<T> getElements() {
+		return elements;
+	}
+	
+	/**
 	 * Adds an element to the container. If the element already exists, it will be replaced by default.
 	 *
 	 * @param element the element to be added.
 	 * @throws JAXBException if there is an error during XML processing.
 	 */
-	public void addElement(T element) throws JAXBException {
-		addElement(element, true);
+	public void addElement(T element, String fieldToCompare) throws JAXBException {
+		addElement(element, true, fieldToCompare);
 	}
 	
 	/**
@@ -58,14 +98,14 @@ public class XmlUtils<T> {
 	 * @param replaceIfExists true to replace the existing element if found, false to avoid replacement.
 	 * @throws JAXBException if there is an error during XML processing.
 	 */
-	public void addElement(T element, boolean replaceIfExists) throws JAXBException {
+	public void addElement(T element, boolean replaceIfExists, String fieldToCompare) throws JAXBException {
 		xmlEventManager.triggerAddElementStarted(element);
 		
 		if (elements == null) {
 			elements = new java.util.ArrayList<>();
 		}
 		
-		Optional<T> existingElement = findElementByField(e -> equals(e, element, "number"));
+		Optional<T> existingElement = findElementByField(e -> equals(e, element, fieldToCompare));
 		
 		if (existingElement.isPresent()) {
 			if (replaceIfExists) {
@@ -89,8 +129,8 @@ public class XmlUtils<T> {
 	 * @param newElement the new element to replace the old one.
 	 * @throws JAXBException if there is an error during XML processing.
 	 */
-	public void modifyElement(T oldElement, T newElement) throws JAXBException {
-		modifyElement(oldElement, newElement, true);
+	public void modifyElement(T oldElement, T newElement, String fieldToCompare) throws JAXBException {
+		modifyElement(oldElement, newElement, true, fieldToCompare);
 	}
 	
 	/**
@@ -101,14 +141,14 @@ public class XmlUtils<T> {
 	 * @param replaceIfExists true to replace the existing element if found, false to avoid replacement.
 	 * @throws JAXBException if there is an error during XML processing.
 	 */
-	public void modifyElement(T oldElement, T newElement, boolean replaceIfExists) throws JAXBException {
+	public void modifyElement(T oldElement, T newElement, boolean replaceIfExists, String fieldToCompare) throws JAXBException {
 		xmlEventManager.triggerModifyElementStarted(oldElement, newElement);
 		
 		if (elements == null) {
 			elements = new java.util.ArrayList<>();
 		}
 		
-		Optional<T> existingElement = findElementByField(e -> equals(e, oldElement, "number"));
+		Optional<T> existingElement = findElementByField(e -> equals(e, oldElement, fieldToCompare));
 		
 		if (existingElement.isPresent()) {
 			if (replaceIfExists) {
@@ -227,8 +267,49 @@ public class XmlUtils<T> {
 	 * @param predicate the predicate used to find the element.
 	 * @return an Optional containing the found element, or an empty Optional if no element is found.
 	 */
-	public Optional<T> findElementByField(java.util.function.Predicate<T> predicate) {
+	private Optional<T> findElementByField(java.util.function.Predicate<T> predicate) {
 		return elements.stream().filter(predicate).findFirst();
+	}
+	
+	/**
+	 * Finds a single element in the list of elements by matching a specified field name and its value.
+	 *
+	 * @param fieldName  the name of the field to search for. This must match the field name in the class.
+	 * @param fieldValue the value of the field to match. Can be any object that is compatible with the field type.
+	 * @return the found element of type T if a match is found; {@code null} if no element matches the criteria.
+	 */
+	public T findElementByFieldValue(String fieldName, Object fieldValue) {
+		return elements.stream().filter(e -> {
+			try {
+				Field field = e.getClass().getDeclaredField(fieldName);
+				field.setAccessible(true);
+				Object value = field.get(e);
+				return Objects.equals(String.valueOf(value), String.valueOf(fieldValue));
+			} catch (NoSuchFieldException | IllegalAccessException ex) {
+				ex.printStackTrace();
+				return false;
+			}
+		}).findFirst().orElse(null);
+	}
+	
+	/**
+	 * Finds all elements by a specific field name and value.
+	 *
+	 * @param fieldName  the name of the field to search for.
+	 * @param fieldValue the value of the field to match.
+	 * @return a list of matching elements.
+	 */
+	public List<T> findElementsByFieldValue(String fieldName, Object fieldValue) {
+		return elements.stream().filter(e -> {
+			try {
+				Field field = e.getClass().getDeclaredField(fieldName);
+				field.setAccessible(true);
+				return Objects.equals(field.get(e), fieldValue);
+			} catch (NoSuchFieldException | IllegalAccessException ex) {
+				ex.printStackTrace();
+				return false;
+			}
+		}).collect(Collectors.toList());
 	}
 	
 	/**
@@ -265,37 +346,5 @@ public class XmlUtils<T> {
 		marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
 		marshaller.marshal(new ListWrapper<>(elements), new File(filePath));
 		xmlEventManager.triggerSavingCompleted();
-	}
-	
-	/**
-	 * Compares two objects based on specific fields to determine if they are equal.
-	 *
-	 * @param obj1       the first object to compare.
-	 * @param obj2       the second object to compare.
-	 * @param fieldNames the names of the fields to compare.
-	 * @return true if the objects are equal based on the specified fields, false otherwise.
-	 */
-	private static boolean equals(Object obj1, Object obj2, String... fieldNames) {
-		if (obj1 == obj2) {
-			return true;
-		}
-		if (obj1 == null || obj2 == null || !obj1.getClass().equals(obj2.getClass())) {
-			return false;
-		}
-		try {
-			for (String fieldName : fieldNames) {
-				Field field = obj1.getClass().getDeclaredField(fieldName);
-				field.setAccessible(true);
-				Object value1 = field.get(obj1);
-				Object value2 = field.get(obj2);
-				if (!Objects.equals(value1, value2)) {
-					return false;
-				}
-			}
-		} catch (NoSuchFieldException | IllegalAccessException e) {
-			e.printStackTrace();
-			return false;
-		}
-		return true;
 	}
 }
