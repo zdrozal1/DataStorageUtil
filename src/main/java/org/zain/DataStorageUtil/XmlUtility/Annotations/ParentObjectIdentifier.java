@@ -1,4 +1,4 @@
-package org.zain.XmlUtility.Annotations;
+package org.zain.DataStorageUtil.XmlUtility.Annotations;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

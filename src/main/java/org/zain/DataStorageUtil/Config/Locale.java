@@ -1,8 +1,8 @@
-package org.zain.Config;
+package org.zain.DataStorageUtil.Config;
 
 /// Class to create a Config object for localization
 public class Locale extends Config {
-	
+
 	/**
 	 * Initializes the Localization object with the specified file name and directory usage flag.
 	 *
@@ -12,11 +12,11 @@ public class Locale extends Config {
 	public Locale(String fileName, boolean useAppDir) {
 		super(fileName, useAppDir);
 	}
-	
+
 	public String getLocalization(String key, String defaultValue) {
 		return super.getProperty(key, defaultValue);
 	}
-	
+
 	public void setLocalization(String key, String defaultValue) {
 		super.setProperty(key, defaultValue, null);
 	}
